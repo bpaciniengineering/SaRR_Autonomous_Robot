@@ -42,14 +42,13 @@ int RWheel;
 //has the first spin happened?
 int firstSpin = 0;
 
-
 //hard constants for when to stop initial spin
 const int direcThreshold = 50;
 const int distThreshold = 1650;
 const int fix = 1425;
 
-Servo L_Servo;  // Servo DC Motor Driver (Designed for RC cars)Servo L_Servo;  // Servo DC Motor Driver (Designed for RC cars)
-Servo R_Servo;  // Servo DC Motor Driver (Designed for RC cars)Servo R_Servo;  // Servo DC Motor Driver (Designed for RC cars)
+Servo L_Servo;  // Servo DC Motor Driver (Designed for RC cars)
+Servo R_Servo;  // Servo DC Motor Driver (Designed for RC cars)
 
 //*************************************************************************
 //  Setup
@@ -168,7 +167,7 @@ void spinRobot() {
   }
 
   //success, robot is looking at light
-  Serial.println("Success! I'm pointing at light! Stopping.");
+  Serial.println("Success! I'm pointing at light! Stopping now.");
   workingDirecThreshold = direc;
   workingDistThreshold = dist;
   Serial.println("workingDirecThreshold =  " + (String)workingDirecThreshold);
