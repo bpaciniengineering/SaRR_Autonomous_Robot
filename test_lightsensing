@@ -1,72 +1,115 @@
-// Autonomous Light Tracking Code
-// Lena Dubitsky and Jesus Serrano Cendejas
 
 //*************************************************************************
-//    Global Variables and Constants
+//*************************************************************************
+
+//                Autonomous Light Tracking Code
+//                Lena Dubitsky and Jesus Serrano Cendejas
+
+//readLightSensors()
+//updateWheels()
+//forwardRobot()
+//spinRobot()
+//stopRobot()
+//fixPoint()
+//killRobot()
+
+//*************************************************************************
+//*************************************************************************
+
+//*************************************************************************
+//  Global Variables and Constants
 //*************************************************************************
 // for motor values: <1500 is forward, >1500 is reverse
 #include <Servo.h>
 
+//RC controller
+int Ch1, Ch2, Ch3, Ch4, Ch5, Ch6;
+
+//variables to hold data
+//these hold values related by the sensors
 int LeftSensor;
 int RightSensor;
-int LWheel;
-int RWheel;
 int dist;
 int direc;
-int dir;
+int point;
+int workingDirecThreshold;
+int workingDistThreshold;
+
+//these hold the "speeds" of the wheels
+int LWheel;
+int RWheel;
+
+//has the first spin happened?
+int firstSpin = 0;
+
+
+//hard constants for when to stop initial spin
+const int direcThreshold = 50;
+const int distThreshold = 1650;
+const int fix = 1425;
+
 Servo L_Servo;  // Servo DC Motor Driver (Designed for RC cars)Servo L_Servo;  // Servo DC Motor Driver (Designed for RC cars)
 Servo R_Servo;  // Servo DC Motor Driver (Designed for RC cars)Servo R_Servo;  // Servo DC Motor Driver (Designed for RC cars)
 
 //*************************************************************************
-//    Setup
+//  Setup
 //*************************************************************************
 void setup() {
-  pinMode(A9, INPUT); // light sensor should be connected to pin A9, it needs to be reading inputs
-  pinMode(A8, INPUT);
-  R_Servo.attach(2); //Pin 2
-  L_Servo.attach(3); //Pin 3
+  // Set the pins that the transmitter will be connected to all to input
+  pinMode(12, INPUT); //I connected this to Chan1 of the Receiver
+  pinMode(11, INPUT); //I connected this to Chan2 of the Receiver
+  pinMode(10, INPUT); //I connected this to Chan3 of the Receiver
+  pinMode(9, INPUT); //I connected this to Chan4 of the Receiver
+  pinMode(8, INPUT); //I connected this to Chan5 of the Receiver
+  pinMode(7, INPUT); //I connected this to Chan6 of the Receiver
+  pinMode(13, OUTPUT); //Onboard LED to output for diagnostics
+
+  pinMode(A9, INPUT); // right light sensor should be connected to pin A9, it needs to be reading inputs
+  pinMode(A8, INPUT); // left sensor
+  R_Servo.attach(2); //Pin 2, right wheel
+  L_Servo.attach(3); //Pin 3, left wheel
 
   Serial.begin(9600); // create port
-  while (!Serial);    // wait until serial window is opened
-  testSetup();
-  Serial.println("stopped test");
- // spinRobot();
-  delay(3000);
+  while (!Serial);  // wait until serial window is opened
 }
 
-
 //*************************************************************************
-//    Main Loop
+//  Main Loop
 //*************************************************************************
 void loop() {
-  Serial.println("inside main loop");
+
+  //this spin will only get executed the first time around.
+  if (firstSpin == 0) {
+    spinRobot();
+    firstSpin = 1;
+  }
+  
+  Serial.println("Entering loop()");
+
+  //Robot has performed initial spin, and it's pointing at the light
   readLightSensors();
-while (dist < 3000){
-  while (abs(direc) < 20){
-    Serial.println("IN THE LOOP!!");
-    Go();
+
+  //Robot is pointing at light
+  while (dist < workingDistThreshold && abs(direc) < workingDirecThreshold) {
+    Serial.println("I'm pointing at light!");
+    //stopRobot();
+    forwardRobot();
     readLightSensors();
   }
+
+  //Robot is NOT pointing at light
+  while (dist > workingDistThreshold || abs(direc) > workingDirecThreshold) {
+    fixPoint();
+    readLightSensors();
+  }
+
+  //When we're 1ft away from light, stop.
+  //Some logic here...
+  //killRobot();
 }
-
-  stopRobot();
-
-  //test things before we're ready
-  //while (true);     //pause code forever
-
-  //get values for light sensors
-  // readLightSensors();
-
-  //if robot is not lined up towards light
-  //spinRobot();
-
-  //if robot is close to light
-  //stopRobot();
-}
-
 
 //*************************************************************************
-//    readLightSensors
+//  readLightSensors
 //*************************************************************************
 void readLightSensors() {
   //read and print values from both light sensors
@@ -75,97 +118,124 @@ void readLightSensors() {
   RightSensor = analogRead(A9);
   dist = LeftSensor + RightSensor;  // associated with distance to light
   direc = LeftSensor - RightSensor; // associated with direction to light
-  Serial.println("L = " + (String)LeftSensor + " | " + (String)RightSensor + " = R");
-  //Serial.println(" ");
-  //Serial.println("Right Sensor = " + (String)RightSensor);
-  // Serial.println(" ");
 
-  // check if sensors are facing towards the light
-  // if (abs(direc) < 20)
-  //{
-  // Serial.println("I'm zero!!!");
-  // Serial.println(" ");
-  //  delay(200);
-  //}
-  // Serial.println("*****************************************************");
+  //Serial.println("L = " + (String)LeftSensor + " | " + (String)RightSensor + " = R");
 }
 
 //*************************************************************************
-//    testSetup
+//  updateWheels
 //*************************************************************************
-void testSetup() {
-  // test the servo motors
-  R_Servo.writeMicroseconds(1700); // 1000-2000, 1500 should be stop
-  L_Servo.writeMicroseconds(1700); // 1000-2000, 1500 should be stop
-  delay(2000);
-  R_Servo.writeMicroseconds(1500); // 1000-2000, 1500 should be stop
-  L_Servo.writeMicroseconds(1500); // 1000-2000, 1500 should be stop
+void updateWheels() {
+
+  //set limits
+  if (RWheel > 2000)
+    RWheel = 2000;
+  if (RWheel < 1000)
+    RWheel = 1000;
+
+  if (LWheel > 2000)
+    LWheel = 2000;
+  if (LWheel < 1000)
+    LWheel = 1000;
+
+  //update the wheels
+  R_Servo.writeMicroseconds(RWheel); // 1000-2000, 1500 should be stop
+  L_Servo.writeMicroseconds(LWheel); // 1000-2000, 1500 should be stop
 }
 
 //*************************************************************************
-//    spinRobot
+//  spinRobot
 //*************************************************************************
 void spinRobot() {
-  R_Servo.writeMicroseconds(1500); // 1000-2000, 1500 should be stop
-  L_Servo.writeMicroseconds(1500); // 1000-2000, 1500 should be stop
+
+  Serial.println("Performing spinRobot()");
+
+  //start from a stopped position
+  stopRobot();
 
   // for initial spin
   readLightSensors();
-  while (abs(direc) > 10) {
-    Serial.println("inside spin function");
+
+  //if either condition is bad, spin
+  while (abs(direc) > direcThreshold || dist > distThreshold) {
+    Serial.println("spinning");
+    //try reading again
     readLightSensors();
-    R_Servo.writeMicroseconds(1450); // right wheel going forwards
-    L_Servo.writeMicroseconds(1550); // left wheel going backwards
+
+    RWheel = 1470; // right wheel going forwards
+    LWheel = 1545; // left wheel going backwards
+    updateWheels();
   }
 
+  //success, robot is looking at light
+  Serial.println("Success! I'm pointing at light! Stopping.");
+  workingDirecThreshold = direc;
+  workingDistThreshold = dist;
+  Serial.println("workingDirecThreshold =  " + (String)workingDirecThreshold);
+  Serial.println("workingDistThreshold =  " + (String)workingDistThreshold);
+  Serial.println("point =  " + (String)direc);
+
   stopRobot();
+  delay(5000);
 }
 
-
 //*************************************************************************
-//    stopRobot
+//  stopRobot
 //*************************************************************************
 void stopRobot() {
-  //stop
-  R_Servo.writeMicroseconds(1500); // 1000-2000, 1500 should be stop
-  L_Servo.writeMicroseconds(1500); // 1000-2000, 1500 should be stop
   //set wheels to zero
+  RWheel = 1500;
+  LWheel = 1500;
+  updateWheels();
 }
 
 //*************************************************************************
-//    forwardRobot
+//  forwardRobot
 //*************************************************************************
 void forwardRobot() {
-  // go slow
-  R_Servo.writeMicroseconds(1450); // 1000-2000, 1500 should be stop
-  L_Servo.writeMicroseconds(1450); // 1000-2000, 1500 should be stop
-  delay(200);
+  //roll forward slowly with even speeds
+  RWheel = 1450;
+  LWheel = 1450;
+  updateWheels();
 }
 
 //*************************************************************************
-//    getVoltage
+//  fixPoint
 //************************************************************************
-int getVoltage(int sped, int dir, int side) {
-  // randomness from trevor
-  int retSpeed = 30*sped;
-  int returnable;
-  if (side == 1) 
-     returnable = 1500 - (retSpeed + 30 * dir);
-  if (side == 0)
-    returnable = 1500 + (retSpeed - 30*dir);
-  if (returnable > 2000)
-    returnable = 2000;
-  if (returnable < 1000)
-    returnable = 1000;
-  return returnable;
+void fixPoint() {
+  Serial.println("");
+  Serial.println("Entering fixPoint()");
+
+  //check to see where we are pointing: + = R, - = L
+  readLightSensors();
+  int point = direc;
+  Serial.println("Point = " + (String)point);
+
+  //if robot is pointing right, speed up right wheel
+  if (point < 0) {
+    Serial.println("I'm pointing right! Speeding up RWheel.");
+    RWheel = fix;
+  }
+
+  //if robot is pointing left, speed up left wheel
+  if (point > 0) {
+    Serial.println("I'm pointing left! Speeding up LWheel.");
+    LWheel = fix;
+  }
+
+  Serial.println("Updating: LWheel = " + (String)LWheel + " | " + (String)RWheel + " = RWheel");
+  updateWheels();
 }
 
 //*************************************************************************
-//    Go
-//************************************************************************
-void Go() {
-  dir = direc/5;
-  R_Servo.writeMicroseconds(getVoltage(3, dir, 1)); // 1000-2000, 1500 should be stop
-  L_Servo.writeMicroseconds(getVoltage(3, dir, 0)); // 1000-2000, 1500 should be stop
-  delay(200);
+//  killRobot
+//*************************************************************************
+void killRobot() {
+  //set wheels to zero
+  RWheel = 1500;
+  LWheel = 1500;
+  updateWheels();
+
+  //pause forever
+  while (true);
 }
