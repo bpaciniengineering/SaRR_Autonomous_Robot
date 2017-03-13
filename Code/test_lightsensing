@@ -2,8 +2,8 @@
 //*************************************************************************
 //*************************************************************************
 
-//                Autonomous Light Tracking Code
-//                Lena Dubitsky and Jesus Serrano Cendejas
+//              Autonomous Light Tracking Code
+//              Lena Dubitsky and Jesus Serrano Cendejas
 
 //readLightSensors()
 //updateWheels()
@@ -19,7 +19,7 @@
 //*************************************************************************
 //  Global Variables and Constants
 //*************************************************************************
-// for motor values: <1500 is forward, >1500 is reverse
+// for motor values: 1000-1500 is forward, 1500-2000 is reverse, speeds increase as values move away from 1500
 #include <Servo.h>
 
 //RC controller
@@ -29,11 +29,19 @@ int Ch1, Ch2, Ch3, Ch4, Ch5, Ch6;
 //these hold values related by the sensors
 int LeftSensor;
 int RightSensor;
-int dist;
-int direc;
+int dist;       // combined sensor output, indicates distance from light source
+int direc;      // left-right sensor output, indicates whether robot is facing towards light or not
 int point;
 int workingDirecThreshold;
 int workingDistThreshold;
+
+//arrays for light sensors
+int LSensor[10];
+int RSensor[10];
+int i = 0;
+
+int SharpValue; // Variable to hold Sharp data
+const int SharpPin = A6; //Pin connecting the sharp
 
 //these hold the "speeds" of the wheels
 int LWheel;
@@ -45,10 +53,11 @@ int firstSpin = 0;
 //hard constants for when to stop initial spin
 const int direcThreshold = 50;
 const int distThreshold = 1650;
-const int fix = 1425;
+const int fixR = 1465;
+const int fixL = 1460;
 
-Servo L_Servo;  // Servo DC Motor Driver (Designed for RC cars)
-Servo R_Servo;  // Servo DC Motor Driver (Designed for RC cars)
+Servo L_Servo;  // Servo DC Motor Driver (Designed for RC cars)Servo L_Servo;  // Servo DC Motor Driver (Designed for RC cars)
+Servo R_Servo;  // Servo DC Motor Driver (Designed for RC cars)Servo R_Servo;  // Servo DC Motor Driver (Designed for RC cars)
 
 //*************************************************************************
 //  Setup
@@ -63,6 +72,7 @@ void setup() {
   pinMode(7, INPUT); //I connected this to Chan6 of the Receiver
   pinMode(13, OUTPUT); //Onboard LED to output for diagnostics
 
+  pinMode(6, INPUT); // for sharp sensor
   pinMode(A9, INPUT); // right light sensor should be connected to pin A9, it needs to be reading inputs
   pinMode(A8, INPUT); // left sensor
   R_Servo.attach(2); //Pin 2, right wheel
@@ -82,7 +92,7 @@ void loop() {
     spinRobot();
     firstSpin = 1;
   }
-  
+
   Serial.println("Entering loop()");
 
   //Robot has performed initial spin, and it's pointing at the light
@@ -90,7 +100,8 @@ void loop() {
 
   //Robot is pointing at light
   while (dist < workingDistThreshold && abs(direc) < workingDirecThreshold) {
-    Serial.println("I'm pointing at light!");
+    Serial.println("I'm pointing at light! Doing nothing");
+    //delay(500);
     //stopRobot();
     forwardRobot();
     readLightSensors();
@@ -98,9 +109,17 @@ void loop() {
 
   //Robot is NOT pointing at light
   while (dist > workingDistThreshold || abs(direc) > workingDirecThreshold) {
-    fixPoint();
+    turnRobot();
+    //forwardRobot();
+    //delay(2000);
+    // fixPoint();
     readLightSensors();
   }
+
+  SharpValue = analogRead(SharpPin); //Read the value of the sharp sensor
+  Serial.println("Sharp =  " + (String)SharpValue);
+  if (SharpValue > 300)
+    killRobot();
 
   //When we're 1ft away from light, stop.
   //Some logic here...
@@ -115,6 +134,39 @@ void readLightSensors() {
 
   LeftSensor = analogRead(A8);
   RightSensor = analogRead(A9);
+  dist = LeftSensor + RightSensor;  // associated with distance to light
+  direc = LeftSensor - RightSensor; // associated with direction to light
+
+  //Serial.println("L = " + (String)LeftSensor + " | " + (String)RightSensor + " = R");
+}
+
+
+//*************************************************************************
+//  readLightSensors
+//*************************************************************************
+void readLightSensorsEdgy() {
+  //read and store average of latest 10 sensor values
+
+  //use arrays to calculate average
+  int l = analogRead(A8);
+  LSensor[i] = l;
+  int r = analogRead(A9);
+  RSensor[i] = r;
+
+  //iterate through arrays
+  i++;
+  i = i % 10; //if i = 10, then restart at i = 0
+
+  int j;
+  int sumL = 0;
+  int sumR = 0;
+  for (j = 0; j < 10; j++) {
+    sumL = sumL + LSensor[j];
+    sumR = sumR + RSensor[j];
+  }
+
+  LeftSensor = sumL / 10;
+  RightSensor = sumR / 10;
   dist = LeftSensor + RightSensor;  // associated with distance to light
   direc = LeftSensor - RightSensor; // associated with direction to light
 
@@ -142,6 +194,54 @@ void updateWheels() {
   L_Servo.writeMicroseconds(LWheel); // 1000-2000, 1500 should be stop
 }
 
+
+//*************************************************************************
+//  turnRobot
+//*************************************************************************
+void turnRobot() {
+
+  Serial.println("Performing turnRobot()");
+
+  //start from a stopped position
+  //stopRobot();
+
+  while (abs(direc) > direcThreshold || dist > distThreshold) {
+    Serial.println("turning");
+
+    //check to see where we are pointing: + = L, - = R
+    readLightSensors();
+    Serial.println("Point = " + (String)direc);
+
+    //if robot is pointing right, spin counterclockwise
+    if (direc < 0) {
+      Serial.println("I'm pointing right! Spinning CCW.");
+      RWheel = 1460; // right wheel going forwards
+      LWheel = 1550; // left wheel going backwards
+      updateWheels();
+    }
+
+    //if robot is pointing left, spin clockwise
+    if (direc > 0) {
+      Serial.println("I'm pointing left! Speeding up CW.");
+      LWheel = 1460; // reft wheel going forwards
+      RWheel = 1550; // right wheel going backwards
+      updateWheels();
+    }
+
+    //try reading again
+    readLightSensors();
+  }
+
+  //success, robot is looking at light
+  Serial.println("Success! I'm pointing at light! Stopping.");
+  Serial.println("point =  " + (String)direc);
+
+  SharpValue = analogRead(SharpPin); //Read the value of the sharp sensor
+  Serial.println("Sharp =  " + (String)SharpValue);
+  if (SharpValue > 400)
+    killRobot();
+
+}
 //*************************************************************************
 //  spinRobot
 //*************************************************************************
@@ -161,13 +261,13 @@ void spinRobot() {
     //try reading again
     readLightSensors();
 
-    RWheel = 1470; // right wheel going forwards
-    LWheel = 1545; // left wheel going backwards
+    RWheel = 1460; // right wheel going forwards
+    LWheel = 1550; // left wheel going backwards
     updateWheels();
   }
 
   //success, robot is looking at light
-  Serial.println("Success! I'm pointing at light! Stopping now.");
+  Serial.println("Success! I'm pointing at light! Stopping.");
   workingDirecThreshold = direc;
   workingDistThreshold = dist;
   Serial.println("workingDirecThreshold =  " + (String)workingDirecThreshold);
@@ -175,7 +275,7 @@ void spinRobot() {
   Serial.println("point =  " + (String)direc);
 
   stopRobot();
-  delay(5000);
+  delay(500);
 }
 
 //*************************************************************************
@@ -193,10 +293,13 @@ void stopRobot() {
 //*************************************************************************
 void forwardRobot() {
   //roll forward slowly with even speeds
-  RWheel = 1450;
+  RWheel = 1465;
   LWheel = 1450;
   updateWheels();
 }
+
+
+
 
 //*************************************************************************
 //  fixPoint
@@ -205,25 +308,31 @@ void fixPoint() {
   Serial.println("");
   Serial.println("Entering fixPoint()");
 
-  //check to see where we are pointing: + = R, - = L
+  //check to see where we are pointing: + = L, - = R
   readLightSensors();
   int point = direc;
   Serial.println("Point = " + (String)point);
-
+  delay(200);
   //if robot is pointing right, speed up right wheel
   if (point < 0) {
     Serial.println("I'm pointing right! Speeding up RWheel.");
-    RWheel = fix;
+    delay(200);
+    RWheel = fixR;
   }
 
   //if robot is pointing left, speed up left wheel
   if (point > 0) {
     Serial.println("I'm pointing left! Speeding up LWheel.");
-    LWheel = fix;
+    delay(200);
+    LWheel = fixL;
   }
 
+
   Serial.println("Updating: LWheel = " + (String)LWheel + " | " + (String)RWheel + " = RWheel");
+  delay(300);
   updateWheels();
+
+
 }
 
 //*************************************************************************
@@ -236,5 +345,10 @@ void killRobot() {
   updateWheels();
 
   //pause forever
-  while (true);
+  while (SharpValue > 400) {
+    stopRobot();
+    SharpValue = analogRead(SharpPin);
+  }
 }
+
+
